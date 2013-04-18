@@ -1,0 +1,20 @@
+body {
+    font-size: 2em;
+}
+
+.center {
+    text-align: center;
+}
+
+.content {
+    display: inline-block;
+    text-align: left;
+    width: 800px;
+}
+
+.screenshots {
+}
+
+.play {
+    font-size: 2em;
+}
