@@ -9,7 +9,7 @@
                  [hiccup "1.0.1"]
                  [ring "1.1.6"]
                  [cheshire "3.0.0"]
-                 [com.keminglabs/singult "0.1.5-SNAPSHOT"]
+                 [com.keminglabs/singult "0.1.6"]
                  ]
   :plugins [[lein-cljsbuild "0.2.7"]]
   :hooks [leiningen.cljsbuild]
