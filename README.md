@@ -9,3 +9,4 @@ TODO
 - Rename from nightbyday to ae
 - Remove useless stuff
 - Fix zoom with pinch
+- Fix parallax
