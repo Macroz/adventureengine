@@ -4,13 +4,13 @@
             [nightbyday.scene :as scene]
             [nightbyday.scenes :as scenes]
             )
-  (:use [nightbyday.util :only [log clj->js]]
+  (:use [ae.util.core :only [log clj->js]]
         [singult.core :only [render]])
   (:require-macros [enfocus.macros :as em])
-  (:use-macros [crate.def-macros :only [defpartial]]))
+  (:use-macros [crate.def-macros :only [defpartial]]
+               [ae.util.macros :only [up!-> deftrace]]))
 
 (def data (atom {}))
-(def nodes (atom {}))
 
 (defn delay-time [x]
   (int (Math/round (* x (@data :delay)))))
@@ -87,56 +87,51 @@
             v1 (k1 map)]
         (recur v1 (rest path))))))
 
-(defn zoomtest []
+(deftrace zoomtest []
   (scene/show-scene! {:id :zoomscene :content (zoom-html)} (delay-time 1.5))
-  (swap! data (fn [data] (-> data
-                             (assoc-in [:scene :layers] [{:id "sky" :scale 0.5 :position [500 0] :size [3000 2000] :objects [{:image "img/sky.png" :position [0 -500] :size [3000 2000]}]}
-                                                         {:id "clouds" :scale 0.6 :position [100 0] :size [3300 1650] :objects [{:image "img/clouds.png" :position [0 -100] :size [2000 500]}]}
-                                                         {:id "landscape" :scale 0.7 :position [150 0] :size [2850 1425] :objects [{:image "img/landscape.png" :position [0 310] :size [2800 550]}]}
-                                                         {:id "ground" :scale 0.8 :position [300 0] :size [2500 1250] :objects [{:image "img/ground.png" :position [0 700] :size [2600 800]}
-                                                                                                                                ]}
-                                                         {:id "main" :position [0 0] :size [2000 1500] :objects [{:type "tree1" :position [0 0] :size [10 10]}
-                                                                                                                 {:image "img/tree.png" :position [1000 800] :size [100 200]}
-                                                                                                                 {:image "img/tree.png" :position [900 810] :size [100 200]}
-                                                                                                                 {:image "img/tree.png" :position [1050 790] :size [90 180]}
-                                                                                                                 {:image "img/tree.png" :position [1300 880] :size [120 250]}]}])
-                             (assoc-in [:scene :scale] 1.0))))
+  (let [layers [{:id "sky" :scale 0.5 :position [500 0] :size [3000 2000] :objects [{:image "img/sky.png" :position [0 -500] :size [3000 2000]}]}
+                {:id "clouds" :scale 0.6 :position [100 0] :size [3300 1650] :objects [{:image "img/clouds.png" :position [0 -100] :size [2000 500]}]}
+                {:id "landscape" :scale 0.7 :position [150 0] :size [2850 1425] :objects [{:image "img/landscape.png" :position [0 310] :size [2800 550]}]}
+                {:id "ground" :scale 0.8 :position [300 0] :size [2500 1250] :objects [{:image "img/ground.png" :position [0 700] :size [2600 800]}
+                                                                                       ]}
+                {:id "main" :position [0 0] :size [2000 1500] :objects [{:type "tree1" :position [0 0] :size [10 10]}
+                                                                        {:image "img/tree.png" :position [1000 800] :size [100 200]}
+                                                                        {:image "img/tree.png" :position [900 810] :size [100 200]}
+                                                                        {:image "img/tree.png" :position [1050 790] :size [90 180]}
+                                                                        {:image "img/tree.png" :position [1300 880] :size [120 250]}]}]
+        initial-scale 1.0]
+    (up!-> data
+           (assoc-in [:scene :layers] layers)
+           (assoc-in [:scene :scale] initial-scale)))
 
   (doseq [layer (get-in @data [:scene :layers])]
     (em/at js/document
            ["svg"] (em/append (layer-svg layer)))
-    (let [layer-node (.getElementById js/document (layer :id))]
-      ;;      (swap! data (fn [data] (update-by-keys data [:scene :layers (by-key :id (layer :id))])
-      ;;                    (fn [layer]
-      ;;                      (assoc layer :node layer-node)))))
-      (swap! nodes (fn [nodes]
-                     (assoc nodes (layer :id) layer-node))))
     (doseq [object (layer :objects)]
       (append-node! layer (image-svg object))))
   )
 
+(defn layer-node [layer]
+  (.getElementById js/document (layer :id)))
+
 (defn refresh-layers []
   (doseq [layer (get-in @data [:scene :layers])]
-    (let [layer-node (@nodes (layer :id))
+    (let [node (layer-node layer)
           [x y] (layer :position [0 0])
           s (get-in @data [:scene :scale])
           transform (str "translate(" (- x) "," (- y) ") scale(" s ")")]
-      (em/at layer-node (em/set-attr
-                         ;;:style (str "-webkit-transform: translate3d(" x "px, " y "px, 0px);")
-                         :transform transform
-                         ))
+      (em/at node (em/set-attr
+                   ;;:style (str "-webkit-transform: translate3d(" x "px, " y "px, 0px);")
+                   :transform transform
+                   ))
       )))
-
-(defn drag-start-layers [layers]
-  (for [layer layers]
-    (assoc layer :drag-start-position (layer :position))))
 
 (defn update-layers [layers [dx dy] s]
   (for [layer layers]
     (let [[x y] (layer :drag-start-position)
-          ;;s (layer :scale 1.0)
-          [dx dy] [(* dx s) (* dy s)]
-          new-position [(- x (/ dx s)) (- y (/ dy s))]]
+          ls (layer :scale 1.0)
+          [dx dy] [(* dx s ls) (* dy s ls)]
+          new-position [(- x dx) (- y dy)]]
       (-> layer
           (assoc :position new-position)))))
 
@@ -144,7 +139,8 @@
   (let [main-layer ((by-key :id "main") (get-in scene [:layers]))
         [lw lh] (main-layer :size)
         [lx ly] (main-layer :position)
-        [dw dh] [(.-clientWidth (.-documentElement js/document)) (.-clientHeight (.-documentElement js/document))]
+        [dw dh] [(.-clientWidth (.-documentElement js/document))
+                 (.-clientHeight (.-documentElement js/document))]
         ns (viewport/between (Math/max (/ dw lw) (/ dh lh)) ns 2.0)
 
         nlw (* lw ns)
@@ -183,25 +179,29 @@
         (update-in [:layers] update-layers [dx dy] ns)
         (assoc-in [:scale] ns))))
 
-(defn drag-start [event]
-  (swap! data (fn [data]
-                (-> data
-                    (assoc-in [:transform-start-scale] (get-in data [:scene :scale]))
-                    (update-in [:scene :layers] drag-start-layers)))))
+(deftrace drag-start-layers [layers]
+  (for [layer layers]
+    (assoc layer :drag-start-position (layer :position))))
 
-(defn drag [event]
-  (swap! data (fn [data]
-                (let [main-layer ((by-key :id "main") (get-in data [:scene :layers]))
-                      [ox oy] (main-layer :drag-start-position)
-                      dx (.-distanceX event)
-                      dy (.-distanceY event)
-                      os (get-in data [:scene :scale])
-                      cx (+ ox (* (.-x (.-position event)) os))
-                      cy (+ oy (* (.-y (.-position event)) os))
-                      ns os]                  
-                  (log "scale=" os " xy=" ox "," oy)
-                  (assoc data :scene (update-scene (data :scene) [ox oy] [dx dy] [cx cy] [os ns]))
-                  )))
+(deftrace drag-start [event]
+  (up!-> data
+         (assoc-in [:transform-start-scale] (get-in @data [:scene :scale]))
+         (update-in [:scene :layers] drag-start-layers)))
+
+(deftrace drag [event]
+  (let [scene (@data :scene)
+        main-layer ((by-key :id "main") (get-in @data [:scene :layers]))
+        [ox oy] (main-layer :drag-start-position)
+        dx (.-distanceX event)
+        dy (.-distanceY event)
+        os (get-in @data [:scene :scale])
+        cx (+ ox (* (.-x (.-position event)) os))
+        cy (+ oy (* (.-y (.-position event)) os))
+        ns os]
+    ;;(log "scale=" os " xy=" ox "," oy)
+    (up!-> data
+           (assoc :scene (update-scene scene [ox oy] [dx dy] [cx cy] [os ns]))
+           ))
   (refresh-layers))
 
 (defn double-tap [event]
@@ -249,7 +249,7 @@
           (recur (conj done-objects new-object) (rest remaining-objects))
           (recur (conj done-objects object) (rest remaining-objects)))))))
 
-(defn startup [delay]
+(deftrace startup [delay]
   (prepare-game-page ".content")
   (swap! data (fn [_] {:delay (or delay 1000)
                        :results #{}}))
@@ -270,5 +270,4 @@
     (set! (.-ontransformstart hammer) transform-start)
     (set! (.-ontransform hammer) transform)
     )
-  (zoomtest)
-  (log "startup"))
+  (zoomtest))
